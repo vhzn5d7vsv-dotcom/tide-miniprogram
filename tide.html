@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>潮汐预报</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+      background: #f0f8ff;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a5276, #2980b9);
+      color: #fff;
+      padding: 20px 16px;
+      text-align: center;
+    }
+    .header h1 { font-size: 22px; font-weight: 700; }
+    .header p { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+
+    .search-bar {
+      position: sticky; top: 0; z-index: 10;
+      padding: 12px 16px;
+      background: #f0f8ff;
+    }
+    .search-bar input {
+      width: 100%; height: 40px; border: none; border-radius: 20px;
+      padding: 0 20px; font-size: 15px; background: #fff;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08); outline: none;
+    }
+
+    .port-card {
+      background: #fff; border-radius: 12px; margin: 0 16px 12px; padding: 16px;
+      box-shadow: 0 1px 8px rgba(0,0,0,0.06); cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .port-card:active { transform: scale(0.98); }
+    .port-card .card-header { display: flex; align-items: baseline; margin-bottom: 10px; }
+    .port-card .name { font-size: 18px; font-weight: 600; color: #1a5276; }
+    .port-card .province { font-size: 12px; color: #999; margin-left: 8px; }
+    .port-card .row { display: flex; align-items: center; margin-bottom: 4px; }
+    .port-card .row .label { width: 70px; font-size: 13px; color: #888; }
+    .port-card .row .value { font-size: 15px; font-weight: 600; }
+    .tag {
+      display: inline-block; font-size: 11px; padding: 1px 10px;
+      border-radius: 10px; margin-left: 8px;
+    }
+    .tag-强潮 { background: #e74c3c20; color: #e74c3c; }
+    .tag-中潮 { background: #f39c1220; color: #f39c12; }
+    .tag-弱潮 { background: #27ae6020; color: #27ae60; }
+
+    .extremes-bar {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;
+    }
+    .extremes-bar .e {
+      font-size: 12px; background: #f0f8ff; padding: 3px 8px; border-radius: 4px;
+    }
+    .high { color: #2980b9; }
+    .low  { color: #27ae60; }
+
+    .back-bar {
+      background: #fff; padding: 12px 16px; border-bottom: 1px solid #eee;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .back-bar .back-btn { font-size: 16px; color: #2980b9; cursor: pointer; }
+    .back-bar .title { font-size: 16px; font-weight: 600; color: #1a5276; }
+
+    .date-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; background: #fff; border-bottom: 1px solid #eee;
+    }
+    .date-nav .btn { font-size: 14px; color: #2980b9; cursor: pointer; padding: 4px 12px; }
+    .date-nav .current { font-size: 16px; font-weight: 600; color: #1a5276; }
+
+    .port-hdr {
+      text-align: center; padding: 16px 0 8px;
+    }
+    .port-hdr .name { font-size: 24px; font-weight: 700; color: #1a5276; }
+    .port-hdr .coord { font-size: 12px; color: #999; margin-top: 2px; }
+
+    .curr-h {
+      display: flex; justify-content: center; align-items: center; gap: 30px; padding: 12px 0;
+    }
+    .curr-h .block { text-align: center; }
+    .curr-h .h-label { font-size: 12px; color: #999; }
+    .curr-h .h-val { font-size: 40px; font-weight: 700; color: #2980b9; line-height: 1; }
+    .curr-h .h-unit { font-size: 14px; color: #666; }
+
+    .section {
+      background: #fff; margin: 12px 16px; border-radius: 12px;
+      padding: 16px; box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    }
+    .section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+    canvas { width: 100%; height: 200px; }
+
+    .extable { width: 100%; }
+    .extable .erow { display: flex; padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: center; }
+    .extable .erow:last-child { border-bottom: none; }
+    .extable .erow span { flex: 1; font-size: 14px; }
+    .extable .eheader { font-weight: 600; color: #888; font-size: 13px; }
+
+    .footer-note { text-align: center; font-size: 12px; color: #ccc; padding: 20px 0; }
+    .empty { text-align: center; padding: 40px 0; color: #999; font-size: 14px; }
+
+    #listView { display: block; }
+    #detailView { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ====== 首页 ====== -->
+<div id="listView">
+  <div class="header">
+    <h1>🌊 潮汐预报</h1>
+    <p>中国沿海主要港口潮汐查询</p>
+  </div>
+  <div class="search-bar">
+    <input id="searchInput" type="text" placeholder="搜索港口名称..." oninput="onSearch()" />
+  </div>
+  <div id="portList"></div>
+  <div id="emptyTip" class="empty" style="display:none;">未找到匹配的港口</div>
+</div>
+
+<!-- ====== 详情页 ====== -->
+<div id="detailView">
+  <div class="back-bar">
+    <span class="back-btn" onclick="showList()">← 返回</span>
+    <span class="title" id="detailPortName">港口</span>
+  </div>
+  <div class="date-nav">
+    <span class="btn" onclick="prevDay()">◀ 前一天</span>
+    <span class="current" id="detailDate"></span>
+    <span class="btn" onclick="nextDay()">后一天 ▶</span>
+    <span class="btn" onclick="todayDate()" style="font-size:12px;">今天</span>
+  </div>
+  <div class="port-hdr">
+    <div class="name" id="detailFullName"></div>
+    <div class="coord" id="detailCoord"></div>
+  </div>
+  <div class="curr-h">
+    <div class="block">
+      <div class="h-label">当前潮高</div>
+      <div><span class="h-val" id="detailCurrH">0</span><span class="h-unit">cm</span></div>
+    </div>
+    <div class="block">
+      <div class="h-label">数据时间</div>
+      <div style="font-size:16px;font-weight:600;color:#666;" id="detailCurrTime">--:--</div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title">📈 潮汐曲线</div>
+    <canvas id="tideCanvas"></canvas>
+  </div>
+  <div class="section">
+    <div class="section-title">🌊 高低潮预报</div>
+    <div class="extable" id="detailExtremes"></div>
+  </div>
+  <div class="footer-note">基于调和常数法计算 · 数据仅供参考</div>
+</div>
+
+<script>
+// ============================================================
+// 潮汐计算引擎
+// ============================================================
+const SPEEDS = { M2: 28.984104, S2: 30, K1: 15.041069, O1: 13.943035 };
+
+function calcTide(port, dateStr, intervalMin) {
+  intervalMin = intervalMin || 10;
+  const date = new Date(dateStr + 'T00:00:00+08:00');
+  const startTs = date.getTime();
+  const endTs = startTs + 24 * 60 * 60 * 1000;
+  const step = intervalMin * 60 * 1000;
+  const result = [];
+  for (let t = startTs; t <= endTs; t += step) {
+    const dt = new Date(t);
+    const hours = dt.getHours() + dt.getMinutes() / 60;
+    const height = calcHeight(port, dateStr, hours);
+    result.push({ time: pad(dt.getHours()) + ':' + pad(dt.getMinutes()), height: Math.round(height * 100) / 100 });
+  }
+  return result;
+}
+
+function calcHeight(port, dateStr, hours) {
+  const t = hoursFromEpoch(dateStr, hours);
+  let height = port.Z0 || 0;
+  ['M2','S2','K1','O1'].forEach(name => {
+    const c = port[name];
+    if (!c) return;
+    const V0 = calcInitialPhase(name, dateStr);
+    const rad = (SPEEDS[name] * t + V0 - c.phase) * Math.PI / 180;
+    height += c.amplitude * Math.cos(rad);
+  });
+  return height;
+}
+
+function calcInitialPhase(name, dateStr) {
+  const d = new Date(dateStr + 'T00:00:00+08:00');
+  const a = Math.floor((14 - d.getMonth() - 1) / 12);
+  const y = d.getFullYear() + 4800 - a;
+  const m = d.getMonth() + 1 + 12 * a - 3;
+  const JD = d.getDate() + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
+  const T = (JD - 2451545.0) / 36525.0;
+  const h = (280.46646 + 36000.76983 * T + 0.0003032 * T * T) % 360;
+  const s = (218.3165 + 481267.8813 * T) % 360;
+  return ({ M2: (2*s - 2*h + 360) % 360, S2: 0, K1: (s - h + 360) % 360, O1: (s - h + 630) % 360 })[name] || 0;
+}
+
+function hoursFromEpoch(dateStr, hours) {
+  return (new Date(dateStr + 'T00:00:00+08:00').getTime() - new Date('1899-12-31T00:00:00Z').getTime()) / 3600000 + hours;
+}
+
+function extractExtremes(tideData) {
+  const ex = [];
+  for (let i = 1; i < tideData.length - 1; i++) {
+    const p = tideData[i-1].height, c = tideData[i].height, n = tideData[i+1].height;
+    if (c > p && c > n) ex.push({ time: tideData[i].time, height: c, type: 'high' });
+    else if (c < p && c < n) ex.push({ time: tideData[i].time, height: c, type: 'low' });
+  }
+  return ex;
+}
+
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+// ============================================================
+// 港口数据
+// ============================================================
+const PORTS = [
+  {id:'dalian',name:'大连',province:'辽宁',lat:38.92,lng:121.64,Z0:210,M2:{a:112,p:298},S2:{a:38,p:327},K1:{a:23,p:256},O1:{a:18,p:243}},
+  {id:'yingkou',name:'营口',province:'辽宁',lat:40.68,lng:122.24,Z0:250,M2:{a:130,p:305},S2:{a:42,p:340},K1:{a:25,p:258},O1:{a:20,p:245}},
+  {id:'qinhuangdao',name:'秦皇岛',province:'河北',lat:39.92,lng:119.60,Z0:150,M2:{a:65,p:290},S2:{a:22,p:315},K1:{a:18,p:260},O1:{a:14,p:248}},
+  {id:'tianjin',name:'天津（塘沽）',province:'天津',lat:38.98,lng:117.70,Z0:260,M2:{a:140,p:295},S2:{a:48,p:325},K1:{a:22,p:252},O1:{a:17,p:240}},
+  {id:'qingdao',name:'青岛',province:'山东',lat:36.07,lng:120.33,Z0:280,M2:{a:155,p:301},S2:{a:52,p:328},K1:{a:22,p:253},O1:{a:17,p:240}},
+  {id:'yantai',name:'烟台',province:'山东',lat:37.55,lng:121.40,Z0:190,M2:{a:85,p:302},S2:{a:30,p:330},K1:{a:22,p:254},O1:{a:17,p:241}},
+  {id:'lianyungang',name:'连云港',province:'江苏',lat:34.74,lng:119.46,Z0:320,M2:{a:180,p:292},S2:{a:60,p:320},K1:{a:23,p:250},O1:{a:18,p:237}},
+  {id:'shanghai',name:'上海（吴淞）',province:'上海',lat:31.37,lng:121.50,Z0:290,M2:{a:165,p:290},S2:{a:55,p:318},K1:{a:24,p:248},O1:{a:19,p:235}},
+  {id:'zhoushan',name:'舟山',province:'浙江',lat:30.01,lng:122.20,Z0:270,M2:{a:150,p:288},S2:{a:50,p:315},K1:{a:23,p:245},O1:{a:18,p:232}},
+  {id:'ningbo',name:'宁波（北仑）',province:'浙江',lat:29.89,lng:121.88,Z0:260,M2:{a:140,p:285},S2:{a:48,p:312},K1:{a:24,p:244},O1:{a:19,p:231}},
+  {id:'wenzhou',name:'温州',province:'浙江',lat:28.02,lng:120.70,Z0:300,M2:{a:170,p:282},S2:{a:58,p:310},K1:{a:26,p:242},O1:{a:20,p:229}},
+  {id:'fuzhou',name:'福州（闽江口）',province:'福建',lat:26.08,lng:119.65,Z0:350,M2:{a:200,p:280},S2:{a:68,p:308},K1:{a:28,p:240},O1:{a:22,p:227}},
+  {id:'xiamen',name:'厦门',province:'福建',lat:24.45,lng:118.08,Z0:390,M2:{a:220,p:274},S2:{a:75,p:300},K1:{a:30,p:234},O1:{a:24,p:221}},
+  {id:'quanzhou',name:'泉州',province:'福建',lat:24.88,lng:118.68,Z0:380,M2:{a:215,p:276},S2:{a:74,p:302},K1:{a:29,p:236},O1:{a:23,p:223}},
+  {id:'shantou',name:'汕头',province:'广东',lat:23.37,lng:116.68,Z0:200,M2:{a:95,p:270},S2:{a:32,p:295},K1:{a:28,p:232},O1:{a:22,p:219}},
+  {id:'shenzhen',name:'深圳（蛇口）',province:'广东',lat:22.48,lng:113.92,Z0:180,M2:{a:82,p:268},S2:{a:28,p:292},K1:{a:27,p:230},O1:{a:21,p:217}},
+  {id:'zhuhai',name:'珠海',province:'广东',lat:22.27,lng:113.57,Z0:170,M2:{a:75,p:265},S2:{a:25,p:290},K1:{a:26,p:228},O1:{a:20,p:215}},
+  {id:'guangzhou',name:'广州（黄埔）',province:'广东',lat:23.10,lng:113.45,Z0:220,M2:{a:105,p:270},S2:{a:36,p:295},K1:{a:28,p:230},O1:{a:22,p:217}},
+  {id:'zhanjiang',name:'湛江',province:'广东',lat:21.20,lng:110.40,Z0:250,M2:{a:130,p:260},S2:{a:45,p:285},K1:{a:30,p:225},O1:{a:24,p:212}},
+  {id:'beihai',name:'北海',province:'广西',lat:21.48,lng:109.12,Z0:240,M2:{a:125,p:258},S2:{a:42,p:282},K1:{a:32,p:222},O1:{a:26,p:210}},
+  {id:'haikou',name:'海口',province:'海南',lat:20.03,lng:110.28,Z0:160,M2:{a:68,p:255},S2:{a:23,p:280},K1:{a:35,p:220},O1:{a:28,p:208}},
+  {id:'sanya',name:'三亚',province:'海南',lat:18.24,lng:109.52,Z0:120,M2:{a:48,p:250},S2:{a:16,p:275},K1:{a:38,p:218},O1:{a:30,p:205}},
+  {id:'hongkong',name:'香港',province:'香港',lat:22.29,lng:114.17,Z0:170,M2:{a:70,p:266},S2:{a:24,p:290},K1:{a:27,p:228},O1:{a:21,p:215}},
+  {id:'macau',name:'澳门',province:'澳门',lat:22.19,lng:113.54,Z0:175,M2:{a:72,p:264},S2:{a:25,p:288},K1:{a:28,p:226},O1:{a:22,p:213}},
+  {id:'dongying',name:'东营',province:'山东',lat:37.45,lng:118.95,Z0:170,M2:{a:78,p:310},S2:{a:28,p:340},K1:{a:20,p:255},O1:{a:15,p:242}},
+  {id:'rizhao',name:'日照',province:'山东',lat:35.42,lng:119.57,Z0:270,M2:{a:145,p:298},S2:{a:48,p:325},K1:{a:21,p:251},O1:{a:16,p:238}},
+  {id:'nantong',name:'南通（吕四）',province:'江苏',lat:32.07,lng:121.60,Z0:320,M2:{a:185,p:285},S2:{a:62,p:312},K1:{a:25,p:246},O1:{a:20,p:233}},
+  {id:'taibei',name:'台北（基隆）',province:'台湾',lat:25.13,lng:121.75,Z0:150,M2:{a:55,p:285},S2:{a:18,p:310},K1:{a:22,p:240},O1:{a:17,p:228}},
+  {id:'gaoxiong',name:'高雄',province:'台湾',lat:22.62,lng:120.27,Z0:120,M2:{a:36,p:275},S2:{a:12,p:300},K1:{a:20,p:232},O1:{a:16,p:220}},
+];
+
+// Normalize: port.amplitude -> H, port.phase -> G
+PORTS.forEach(p => {
+  ['M2','S2','K1','O1'].forEach(k => {
+    if (p[k] && p[k].a !== undefined) {
+      p[k].amplitude = p[k].a;
+      p[k].phase = p[k].p;
+      delete p[k].a; delete p[k].p;
+    }
+  });
+});
+
+// ============================================================
+// 应用逻辑
+// ============================================================
+let currentPort = null;
+let currentDate = '';
+let filteredPorts = [...PORTS];
+
+function getToday() { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+
+function renderPortList(ports) {
+  const el = document.getElementById('portList');
+  if (ports.length === 0) {
+    el.innerHTML = '';
+    document.getElementById('emptyTip').style.display = 'block';
+    return;
+  }
+  document.getElementById('emptyTip').style.display = 'none';
+
+  const today = getToday();
+  let html = '';
+  for (const p of ports) {
+    const td = calcTide(p, today, 10);
+    const ex = extractExtremes(td);
+    const now = new Date();
+    const curMin = now.getHours() * 60 + now.getMinutes();
+    const idx = Math.min(Math.floor(curMin / 10), td.length - 1);
+    const curH = Math.round(td[idx] ? td[idx].height : 0);
+    const maxH = Math.max(...td.map(d => d.height));
+    const minH = Math.min(...td.map(d => d.height));
+    const range = Math.round((maxH - minH) * 10) / 10;
+    const tideType = range > 400 ? '强潮' : range > 200 ? '中潮' : '弱潮';
+
+    let nextEvent = null;
+    for (const e of ex) {
+      const [h, m] = e.time.split(':').map(Number);
+      if (h * 60 + m > curMin) { nextEvent = e; break; }
+    }
+
+    const exHtml = ex.slice(0, 8).map(e =>
+      `<span class="e"><span class="${e.type}">${e.type === 'high' ? '🌊涨' : '⬇退'}</span> ${e.time} ${Math.round(e.height)}cm</span>`
+    ).join('');
+
+    html += `
+      <div class="port-card" onclick="showDetail('${p.id}')">
+        <div class="card-header">
+          <span class="name">${p.name}</span>
+          <span class="province">${p.province}</span>
+        </div>
+        <div class="row">
+          <span class="label">当前潮高</span>
+          <span class="value">${curH}cm</span>
+          <span class="tag tag-${tideType}">${tideType}</span>
+        </div>
+        <div class="row">
+          <span class="label">下一个</span>
+          <span class="value">${nextEvent ? nextEvent.time + ' ' + (nextEvent.type === 'high' ? '🌊' : '⬇️') : '--'}</span>
+          <span style="font-size:13px;color:#888;margin-left:6px;">${nextEvent ? Math.round(nextEvent.height) + 'cm' : ''}</span>
+        </div>
+        <div class="extremes-bar">${exHtml}</div>
+      </div>
+    `;
+  }
+  el.innerHTML = html;
+}
+
+function onSearch() {
+  const val = document.getElementById('searchInput').value.trim().toLowerCase();
+  filteredPorts = val ? PORTS.filter(p => p.name.includes(val) || p.province.includes(val)) : [...PORTS];
+  renderPortList(filteredPorts);
+}
+
+function showDetail(portId) {
+  currentPort = PORTS.find(p => p.id === portId);
+  if (!currentPort) return;
+  currentDate = getToday();
+  document.getElementById('listView').style.display = 'none';
+  document.getElementById('detailView').style.display = 'block';
+  document.getElementById('detailPortName').textContent = currentPort.name;
+  document.getElementById('detailFullName').textContent = currentPort.name;
+  document.getElementById('detailCoord').textContent = currentPort.lat + '°N  ' + currentPort.lng + '°E';
+  renderDetail();
+}
+
+function showList() {
+  document.getElementById('listView').style.display = 'block';
+  document.getElementById('detailView').style.display = 'none';
+  renderPortList(filteredPorts);
+}
+
+function prevDay() {
+  const d = new Date(currentDate);
+  d.setDate(d.getDate() - 1);
+  currentDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  renderDetail();
+}
+
+function nextDay() {
+  const d = new Date(currentDate);
+  d.setDate(d.getDate() + 1);
+  currentDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  renderDetail();
+}
+
+function todayDate() {
+  currentDate = getToday();
+  renderDetail();
+}
+
+function renderDetail() {
+  document.getElementById('detailDate').textContent = currentDate;
+  const td = calcTide(currentPort, currentDate, 10);
+  const ex = extractExtremes(td);
+  const now = new Date();
+  const curMin = now.getHours() * 60 + now.getMinutes();
+  const idx = Math.min(Math.floor(curMin / 10), td.length - 1);
+  document.getElementById('detailCurrH').textContent = Math.round(td[idx] ? td[idx].height : 0);
+  document.getElementById('detailCurrTime').textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
+
+  let exHtml = '<div class="erow eheader"><span>时间</span><span>类型</span><span>潮高</span></div>';
+  for (const e of ex) {
+    exHtml += `<div class="erow"><span>${e.time}</span><span class="${e.type}">${e.type === 'high' ? '🌊 高潮' : '⬇️ 低潮'}</span><span>${Math.round(e.height)}cm</span></div>`;
+  }
+  document.getElementById('detailExtremes').innerHTML = exHtml;
+  drawChart(td, ex);
+}
+
+function drawChart(tideData, extremes) {
+  const canvas = document.getElementById('tideCanvas');
+  const parent = canvas.parentElement;
+  const w = parent.clientWidth - 32;
+  const h = 200;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const pad = { top: 20, bottom: 25, left: 45, right: 10 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  const heights = tideData.map(d => d.height);
+  let maxH = Math.ceil(Math.max(...heights) / 50) * 50;
+  let minH = Math.floor(Math.min(...heights) / 50) * 50;
+  if (maxH === minH) maxH = minH + 50;
+  const rangeH = maxH - minH;
+
+  const yScale = (v) => pad.top + ch - (v - minH) / rangeH * ch;
+  const xScale = cw / tideData.length;
+
+  // Background
+  ctx.fillStyle = '#f0f8ff';
+  ctx.fillRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 1;
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = '#999';
+  ctx.textAlign = 'right';
+  for (let v = minH; v <= maxH; v += 50) {
+    const y = yScale(v);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
+    ctx.fillText(v + 'cm', pad.left - 4, y + 4);
+  }
+
+  // Time labels
+  ctx.fillStyle = '#999';
+  ctx.textAlign = 'center';
+  for (let i = 0; i < tideData.length; i += 36) {
+    ctx.fillText(tideData[i].time, pad.left + i * xScale, h - 4);
+  }
+
+  // Curve
+  ctx.beginPath();
+  ctx.strokeStyle = '#2980b9';
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < tideData.length; i++) {
+    const x = pad.left + i * xScale;
+    const y = yScale(tideData[i].height);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Fill
+  const grd = ctx.createLinearGradient(0, pad.top, 0, h - pad.bottom);
+  grd.addColorStop(0, 'rgba(41,128,185,0.2)');
+  grd.addColorStop(1, 'rgba(41,128,185,0.02)');
+  ctx.beginPath();
+  for (let i = 0; i < tideData.length; i++) {
+    const x = pad.left + i * xScale;
+    const y = yScale(tideData[i].height);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.lineTo(pad.left + (tideData.length - 1) * xScale, h - pad.bottom);
+  ctx.lineTo(pad.left, h - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = grd;
+  ctx.fill();
+
+  // Extreme markers
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  for (const e of extremes) {
+    const idx = tideData.findIndex(d => d.time === e.time);
+    if (idx < 0) continue;
+    const x = pad.left + idx * xScale;
+    const y = yScale(tideData[idx].height);
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = e.type === 'high' ? '#e74c3c' : '#27ae60';
+    ctx.fill();
+    ctx.fillStyle = e.type === 'high' ? '#e74c3c' : '#27ae60';
+    const dy = e.type === 'high' ? -12 : 14;
+    ctx.fillText(e.time, x, y + dy);
+    ctx.fillText(Math.round(e.height) + 'cm', x, y + dy + (e.type === 'high' ? -12 : 14));
+  }
+}
+
+// ============================================================
+// 启动
+// ============================================================
+renderPortList(PORTS);
+</script>
+</body>
+</html>
